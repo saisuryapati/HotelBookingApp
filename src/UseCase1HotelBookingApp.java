@@ -1,13 +1,14 @@
 import java.util.*;
+import java.util.concurrent.*;
 
 public class UseCase1HotelBookingApp {
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException {
 
         // ------------------------------
         // UC1: Room Inventory
         // ------------------------------
-        HashMap<String, Integer> inventory = new HashMap<>();
+        Map<String, Integer> inventory = new ConcurrentHashMap<>();
         inventory.put("Single Room", 5);
         inventory.put("Double Room", 3);
         inventory.put("Suite Room", 2);
@@ -16,78 +17,58 @@ public class UseCase1HotelBookingApp {
         inventory.forEach((room, count) -> System.out.println(room + " Available: " + count));
 
         // ------------------------------
-        // UC5: Booking Request Queue
+        // UC11: Concurrent Booking Simulation
         // ------------------------------
-        Queue<Reservation> bookingQueue = new LinkedList<>();
+        Queue<Reservation> bookingQueue = new ConcurrentLinkedQueue<>();
         bookingQueue.add(new Reservation("Alice", "Single Room"));
         bookingQueue.add(new Reservation("Bob", "Double Room"));
         bookingQueue.add(new Reservation("Charlie", "Suite Room"));
         bookingQueue.add(new Reservation("Diana", "Single Room"));
+        bookingQueue.add(new Reservation("Eve", "Double Room"));
 
-        // ------------------------------
-        // UC6 & UC9: Reservation Confirmation & Validation
-        // ------------------------------
-        HashMap<String, Set<String>> allocatedRooms = new HashMap<>();
-        inventory.keySet().forEach(roomType -> allocatedRooms.put(roomType, new HashSet<>()));
+        Map<String, Set<String>> allocatedRooms = new ConcurrentHashMap<>();
+        inventory.keySet().forEach(roomType -> allocatedRooms.put(roomType, ConcurrentHashMap.newKeySet()));
 
-        Map<String, Reservation> confirmedReservations = new HashMap<>();
-        List<Reservation> bookingHistory = new ArrayList<>();
-        Stack<String> rollbackStack = new Stack<>();
+        Map<String, Reservation> confirmedReservations = new ConcurrentHashMap<>();
 
-        System.out.println("\n=== Booking with Validation ===");
+        System.out.println("\n=== UC11: Concurrent Booking Simulation ===");
+
+        // Use a thread pool to simulate multiple guests booking at the same time
+        ExecutorService executor = Executors.newFixedThreadPool(3);
+
         while (!bookingQueue.isEmpty()) {
             Reservation request = bookingQueue.poll();
-            try {
-                validateBooking(request, inventory);
+            if (request != null) {
+                executor.submit(() -> {
+                    try {
+                        synchronized (inventory) {
+                            validateBooking(request, inventory);
+                            int available = inventory.get(request.getRoomType());
+                            String roomID = request.getRoomType().substring(0, 2).toUpperCase() + (allocatedRooms.get(request.getRoomType()).size() + 1);
 
-                int available = inventory.get(request.getRoomType());
-                String roomID = request.getRoomType().substring(0, 2).toUpperCase() + (allocatedRooms.get(request.getRoomType()).size() + 1);
+                            allocatedRooms.get(request.getRoomType()).add(roomID);
+                            inventory.put(request.getRoomType(), available - 1);
 
-                allocatedRooms.get(request.getRoomType()).add(roomID);
-                inventory.put(request.getRoomType(), available - 1);
+                            request.setRoomID(roomID);
+                            confirmedReservations.put(roomID, request);
 
-                request.setRoomID(roomID);
-                confirmedReservations.put(roomID, request);
-                bookingHistory.add(request);
-                rollbackStack.push(roomID);
-
-                System.out.println(request.getGuestName() + " booked " + request.getRoomType() + " with Room ID: " + roomID);
-
-            } catch (InvalidBookingException e) {
-                System.out.println("Booking failed for " + request.getGuestName() + ": " + e.getMessage());
+                            System.out.println(Thread.currentThread().getName() + " booked " + request.getRoomType() + " for " + request.getGuestName() + " -> Room ID: " + roomID);
+                        }
+                    } catch (InvalidBookingException e) {
+                        System.out.println(Thread.currentThread().getName() + " failed for " + request.getGuestName() + ": " + e.getMessage());
+                    }
+                });
             }
         }
 
-        // ------------------------------
-        // UC10: Booking Cancellation & Rollback
-        // ------------------------------
-        System.out.println("\n=== UC10: Cancellation & Inventory Rollback ===");
+        executor.shutdown();
+        executor.awaitTermination(10, TimeUnit.SECONDS);
 
-        // Let's cancel the last booking (LIFO)
-        if (!rollbackStack.isEmpty()) {
-            String lastRoomID = rollbackStack.pop();
-            Reservation canceled = confirmedReservations.get(lastRoomID);
-
-            if (canceled != null) {
-                String roomType = canceled.getRoomType();
-                allocatedRooms.get(roomType).remove(lastRoomID);
-                inventory.put(roomType, inventory.get(roomType) + 1);
-                bookingHistory.remove(canceled);
-                confirmedReservations.remove(lastRoomID);
-
-                System.out.println("Canceled booking: " + canceled.getGuestName() + ", Room ID: " + lastRoomID);
-            }
-        }
-
-        // Show inventory after cancellation
-        System.out.println("\nUpdated Inventory after Cancellation:");
+        System.out.println("\n=== Final Inventory ===");
         inventory.forEach((room, count) -> System.out.println(room + " Available: " + count));
 
-        // Show booking history after cancellation
-        System.out.println("\nBooking History:");
-        for (Reservation r : bookingHistory) {
-            System.out.println("Reservation ID: " + r.getRoomID() + ", Guest: " + r.getGuestName() + ", Room Type: " + r.getRoomType());
-        }
+        System.out.println("\n=== Confirmed Reservations ===");
+        confirmedReservations.forEach((id, r) -> System.out.println("Room ID: " + id + ", Guest: " + r.getGuestName() + ", Room Type: " + r.getRoomType()));
     }
 
     // ------------------------------
@@ -123,11 +104,6 @@ class Reservation {
     public String getRoomType() { return roomType; }
     public String getRoomID() { return roomID; }
     public void setRoomID(String roomID) { this.roomID = roomID; }
-
-    @Override
-    public String toString() {
-        return "Guest: " + guestName + ", Room Type: " + roomType;
-    }
 }
 
 // ------------------------------
