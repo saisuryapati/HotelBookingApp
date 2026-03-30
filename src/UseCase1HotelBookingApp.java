@@ -24,7 +24,6 @@ public class UseCase1HotelBookingApp {
             System.out.println(room + " Available: " + inventory.get(room));
         }
 
-        // Update availability
         inventory.put("Double Room", 4);
         System.out.println("\n=== UC1: After Update ===");
         for (String room : inventory.keySet()) {
@@ -42,7 +41,7 @@ public class UseCase1HotelBookingApp {
         }
 
         // ------------------------------
-        // UC5: Booking Request Queue (FIFO)
+        // UC5: Booking Request Queue
         // ------------------------------
         System.out.println("\n=== UC5: Booking Requests Queue ===");
         Queue<Reservation> bookingQueue = new LinkedList<>();
@@ -65,8 +64,8 @@ public class UseCase1HotelBookingApp {
             allocatedRooms.put(roomType, new HashSet<>());
         }
 
-        // Store confirmed reservations for UC7
         Map<String, Reservation> confirmedReservations = new HashMap<>();
+        List<Reservation> bookingHistory = new ArrayList<>(); // UC8 booking history
 
         while (!bookingQueue.isEmpty()) {
             Reservation request = bookingQueue.poll();
@@ -74,16 +73,17 @@ public class UseCase1HotelBookingApp {
             int available = inventory.getOrDefault(roomType, 0);
 
             if (available > 0) {
-                // Generate unique room ID
                 String roomID = roomType.substring(0, 2).toUpperCase() + (allocatedRooms.get(roomType).size() + 1);
                 allocatedRooms.get(roomType).add(roomID);
-
-                // Update inventory
                 inventory.put(roomType, available - 1);
 
-                // Save confirmed reservation with room ID
                 request.setRoomID(roomID);
                 confirmedReservations.put(roomID, request);
+
+                // --------------------------
+                // UC8: Add to booking history
+                // --------------------------
+                bookingHistory.add(request);
 
                 System.out.println(request.getGuestName() + " booked " + roomType + " with Room ID: " + roomID);
             } else {
@@ -106,26 +106,31 @@ public class UseCase1HotelBookingApp {
         // ------------------------------
         System.out.println("\n=== UC7: Add-On Service Selection ===");
         Map<String, List<Service>> reservationServices = new HashMap<>();
-
-        // Sample services
         Service breakfast = new Service("Breakfast", 10);
         Service airportPickup = new Service("Airport Pickup", 20);
         Service spa = new Service("Spa Access", 30);
 
-        // Guests select services
         addServiceToReservation(reservationServices, confirmedReservations.get("SI1"), breakfast, spa);
         addServiceToReservation(reservationServices, confirmedReservations.get("DO1"), airportPickup);
 
-        // Display add-on services and total additional cost
         for (String roomID : reservationServices.keySet()) {
             List<Service> services = reservationServices.get(roomID);
             int totalCost = services.stream().mapToInt(Service::getCost).sum();
             System.out.println("Reservation " + roomID + " Services: " + services + " | Total Cost: $" + totalCost);
         }
+
+        // ------------------------------
+        // UC8: Booking History & Reporting
+        // ------------------------------
+        System.out.println("\n=== UC8: Booking History Report ===");
+        for (Reservation r : bookingHistory) {
+            System.out.println("Reservation ID: " + r.getRoomID() + ", Guest: " + r.getGuestName() + ", Room Type: " + r.getRoomType());
+        }
+        System.out.println("Total bookings confirmed: " + bookingHistory.size());
     }
 
     private static void addServiceToReservation(Map<String, List<Service>> reservationServices, Reservation reservation, Service... services) {
-        if (reservation == null) return; // skip if reservation not found
+        if (reservation == null) return;
         reservationServices.putIfAbsent(reservation.getRoomID(), new ArrayList<>());
         for (Service s : services) {
             reservationServices.get(reservation.getRoomID()).add(s);
