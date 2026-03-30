@@ -1,99 +1,88 @@
+import java.io.*;
 import java.util.*;
-import java.util.concurrent.*;
 
-public class UseCase1HotelBookingApp {
+public class UseCase1HotelBookingApp implements Serializable {
 
-    public static void main(String[] args) throws InterruptedException {
+    private static Map<String, Integer> inventory = new HashMap<>();
+    private static List<Reservation> confirmedReservations = new ArrayList<>();
+    private static final String DATA_FILE = "bookingData.ser";
 
-        // ------------------------------
-        // UC1: Room Inventory
-        // ------------------------------
-        Map<String, Integer> inventory = new ConcurrentHashMap<>();
-        inventory.put("Single Room", 5);
-        inventory.put("Double Room", 3);
-        inventory.put("Suite Room", 2);
+    public static void main(String[] args) {
 
-        System.out.println("=== UC1: Room Inventory ===");
-        inventory.forEach((room, count) -> System.out.println(room + " Available: " + count));
-
-        // ------------------------------
-        // UC11: Concurrent Booking Simulation
-        // ------------------------------
-        Queue<Reservation> bookingQueue = new ConcurrentLinkedQueue<>();
-        bookingQueue.add(new Reservation("Alice", "Single Room"));
-        bookingQueue.add(new Reservation("Bob", "Double Room"));
-        bookingQueue.add(new Reservation("Charlie", "Suite Room"));
-        bookingQueue.add(new Reservation("Diana", "Single Room"));
-        bookingQueue.add(new Reservation("Eve", "Double Room"));
-
-        Map<String, Set<String>> allocatedRooms = new ConcurrentHashMap<>();
-        inventory.keySet().forEach(roomType -> allocatedRooms.put(roomType, ConcurrentHashMap.newKeySet()));
-
-        Map<String, Reservation> confirmedReservations = new ConcurrentHashMap<>();
-
-        System.out.println("\n=== UC11: Concurrent Booking Simulation ===");
-
-        // Use a thread pool to simulate multiple guests booking at the same time
-        ExecutorService executor = Executors.newFixedThreadPool(3);
-
-        while (!bookingQueue.isEmpty()) {
-            Reservation request = bookingQueue.poll();
-            if (request != null) {
-                executor.submit(() -> {
-                    try {
-                        synchronized (inventory) {
-                            validateBooking(request, inventory);
-                            int available = inventory.get(request.getRoomType());
-                            String roomID = request.getRoomType().substring(0, 2).toUpperCase() + (allocatedRooms.get(request.getRoomType()).size() + 1);
-
-                            allocatedRooms.get(request.getRoomType()).add(roomID);
-                            inventory.put(request.getRoomType(), available - 1);
-
-                            request.setRoomID(roomID);
-                            confirmedReservations.put(roomID, request);
-
-                            System.out.println(Thread.currentThread().getName() + " booked " + request.getRoomType() + " for " + request.getGuestName() + " -> Room ID: " + roomID);
-                        }
-                    } catch (InvalidBookingException e) {
-                        System.out.println(Thread.currentThread().getName() + " failed for " + request.getGuestName() + ": " + e.getMessage());
-                    }
-                });
-            }
+        // Try to restore previous state
+        if (!restoreState()) {
+            // Initialize if no previous state exists
+            inventory.put("Single Room", 5);
+            inventory.put("Double Room", 3);
+            inventory.put("Suite Room", 2);
         }
 
-        executor.shutdown();
-        executor.awaitTermination(10, TimeUnit.SECONDS);
-
-        System.out.println("\n=== Final Inventory ===");
+        System.out.println("=== Current Inventory ===");
         inventory.forEach((room, count) -> System.out.println(room + " Available: " + count));
 
-        System.out.println("\n=== Confirmed Reservations ===");
-        confirmedReservations.forEach((id, r) -> System.out.println("Room ID: " + id + ", Guest: " + r.getGuestName() + ", Room Type: " + r.getRoomType()));
+        // Simulate a booking
+        Reservation res1 = new Reservation("Alice", "Single Room");
+        if (processBooking(res1)) {
+            System.out.println("Booking confirmed: " + res1.getGuestName() + " -> " + res1.getRoomType());
+        }
+
+        // Simulate another booking
+        Reservation res2 = new Reservation("Bob", "Double Room");
+        if (processBooking(res2)) {
+            System.out.println("Booking confirmed: " + res2.getGuestName() + " -> " + res2.getRoomType());
+        }
+
+        // Display updated inventory
+        System.out.println("\n=== Updated Inventory ===");
+        inventory.forEach((room, count) -> System.out.println(room + " Available: " + count));
+
+        // Save state before exit
+        saveState();
     }
 
-    // ------------------------------
-    // UC9: Validation Method
-    // ------------------------------
-    private static void validateBooking(Reservation reservation, Map<String, Integer> inventory) throws InvalidBookingException {
-        if (!inventory.containsKey(reservation.getRoomType())) {
-            throw new InvalidBookingException("Invalid room type: " + reservation.getRoomType());
+    // Booking logic
+    private static boolean processBooking(Reservation res) {
+        Integer available = inventory.get(res.getRoomType());
+        if (available == null || available <= 0) {
+            System.out.println("Booking failed for " + res.getGuestName() + ": " + res.getRoomType() + " not available.");
+            return false;
         }
-        if (inventory.get(reservation.getRoomType()) <= 0) {
-            throw new InvalidBookingException(reservation.getRoomType() + " is fully booked");
+        inventory.put(res.getRoomType(), available - 1);
+        confirmedReservations.add(res);
+        return true;
+    }
+
+    // Save state to file
+    private static void saveState() {
+        try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(DATA_FILE))) {
+            oos.writeObject(inventory);
+            oos.writeObject(confirmedReservations);
+            System.out.println("\nSystem state saved successfully.");
+        } catch (IOException e) {
+            System.out.println("Error saving system state: " + e.getMessage());
         }
-        if (reservation.getGuestName() == null || reservation.getGuestName().isEmpty()) {
-            throw new InvalidBookingException("Guest name cannot be empty");
+    }
+
+    // Restore state from file
+    private static boolean restoreState() {
+        File file = new File(DATA_FILE);
+        if (!file.exists()) return false;
+        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(DATA_FILE))) {
+            inventory = (Map<String, Integer>) ois.readObject();
+            confirmedReservations = (List<Reservation>) ois.readObject();
+            System.out.println("System state restored successfully.");
+            return true;
+        } catch (IOException | ClassNotFoundException e) {
+            System.out.println("Error restoring system state: " + e.getMessage());
+            return false;
         }
     }
 }
 
-// ------------------------------
 // Reservation class
-// ------------------------------
-class Reservation {
+class Reservation implements Serializable {
     private String guestName;
     private String roomType;
-    private String roomID;
 
     public Reservation(String guestName, String roomType) {
         this.guestName = guestName;
@@ -102,15 +91,4 @@ class Reservation {
 
     public String getGuestName() { return guestName; }
     public String getRoomType() { return roomType; }
-    public String getRoomID() { return roomID; }
-    public void setRoomID(String roomID) { this.roomID = roomID; }
-}
-
-// ------------------------------
-// UC9: Custom Exception
-// ------------------------------
-class InvalidBookingException extends Exception {
-    public InvalidBookingException(String message) {
-        super(message);
-    }
 }
