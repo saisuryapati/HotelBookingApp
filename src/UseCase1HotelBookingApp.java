@@ -1,11 +1,4 @@
-import java.util.HashMap;
-import java.util.Map;
-import java.util.LinkedList;
-import java.util.Queue;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.List;
-import java.util.ArrayList;
+import java.util.*;
 
 public class UseCase1HotelBookingApp {
 
@@ -20,107 +13,59 @@ public class UseCase1HotelBookingApp {
         inventory.put("Suite Room", 2);
 
         System.out.println("=== UC1: Room Inventory ===");
-        for (String room : inventory.keySet()) {
-            System.out.println(room + " Available: " + inventory.get(room));
-        }
-
-        inventory.put("Double Room", 4);
-        System.out.println("\n=== UC1: After Update ===");
-        for (String room : inventory.keySet()) {
-            System.out.println(room + " Available: " + inventory.get(room));
-        }
+        inventory.forEach((room, count) -> System.out.println(room + " Available: " + count));
 
         // ------------------------------
         // UC4: Read-only Room Search
         // ------------------------------
         System.out.println("\n=== UC4: Available Rooms ===");
-        for (Map.Entry<String, Integer> entry : inventory.entrySet()) {
-            if (entry.getValue() > 0) {
-                System.out.println(entry.getKey() + " Available: " + entry.getValue());
-            }
-        }
+        inventory.forEach((room, count) -> {
+            if (count > 0) System.out.println(room + " Available: " + count);
+        });
 
         // ------------------------------
         // UC5: Booking Request Queue
         // ------------------------------
-        System.out.println("\n=== UC5: Booking Requests Queue ===");
         Queue<Reservation> bookingQueue = new LinkedList<>();
         bookingQueue.add(new Reservation("Alice", "Single Room"));
         bookingQueue.add(new Reservation("Bob", "Double Room"));
         bookingQueue.add(new Reservation("Charlie", "Suite Room"));
         bookingQueue.add(new Reservation("Diana", "Single Room"));
-        bookingQueue.add(new Reservation("Eve", "Single Room"));
-
-        for (Reservation request : bookingQueue) {
-            System.out.println(request);
-        }
+        bookingQueue.add(new Reservation("Eve", "InvalidRoom")); // invalid for UC9 demo
 
         // ------------------------------
         // UC6: Reservation Confirmation & Room Allocation
         // ------------------------------
-        System.out.println("\n=== UC6: Reservation Confirmation & Room Allocation ===");
         HashMap<String, Set<String>> allocatedRooms = new HashMap<>();
-        for (String roomType : inventory.keySet()) {
-            allocatedRooms.put(roomType, new HashSet<>());
-        }
+        inventory.keySet().forEach(roomType -> allocatedRooms.put(roomType, new HashSet<>()));
 
         Map<String, Reservation> confirmedReservations = new HashMap<>();
-        List<Reservation> bookingHistory = new ArrayList<>(); // UC8 booking history
+        List<Reservation> bookingHistory = new ArrayList<>();
 
+        System.out.println("\n=== UC9: Booking with Validation & Error Handling ===");
         while (!bookingQueue.isEmpty()) {
             Reservation request = bookingQueue.poll();
-            String roomType = request.getRoomType();
-            int available = inventory.getOrDefault(roomType, 0);
+            try {
+                validateBooking(request, inventory); // UC9 validation
 
-            if (available > 0) {
-                String roomID = roomType.substring(0, 2).toUpperCase() + (allocatedRooms.get(roomType).size() + 1);
-                allocatedRooms.get(roomType).add(roomID);
-                inventory.put(roomType, available - 1);
+                int available = inventory.get(request.getRoomType());
+                String roomID = request.getRoomType().substring(0, 2).toUpperCase() + (allocatedRooms.get(request.getRoomType()).size() + 1);
+
+                allocatedRooms.get(request.getRoomType()).add(roomID);
+                inventory.put(request.getRoomType(), available - 1);
 
                 request.setRoomID(roomID);
                 confirmedReservations.put(roomID, request);
-
-                // --------------------------
-                // UC8: Add to booking history
-                // --------------------------
                 bookingHistory.add(request);
 
-                System.out.println(request.getGuestName() + " booked " + roomType + " with Room ID: " + roomID);
-            } else {
-                System.out.println("Sorry " + request.getGuestName() + ", " + roomType + " is fully booked.");
+                System.out.println(request.getGuestName() + " booked " + request.getRoomType() + " with Room ID: " + roomID);
+            } catch (InvalidBookingException e) {
+                System.out.println("Booking failed for " + request.getGuestName() + ": " + e.getMessage());
             }
         }
 
-        System.out.println("\n=== Remaining Inventory ===");
-        for (String roomType : inventory.keySet()) {
-            System.out.println(roomType + " Available: " + inventory.get(roomType));
-        }
-
-        System.out.println("\n=== Allocated Rooms ===");
-        for (String roomType : allocatedRooms.keySet()) {
-            System.out.println(roomType + " Allocated IDs: " + allocatedRooms.get(roomType));
-        }
-
         // ------------------------------
-        // UC7: Add-On Service Selection
-        // ------------------------------
-        System.out.println("\n=== UC7: Add-On Service Selection ===");
-        Map<String, List<Service>> reservationServices = new HashMap<>();
-        Service breakfast = new Service("Breakfast", 10);
-        Service airportPickup = new Service("Airport Pickup", 20);
-        Service spa = new Service("Spa Access", 30);
-
-        addServiceToReservation(reservationServices, confirmedReservations.get("SI1"), breakfast, spa);
-        addServiceToReservation(reservationServices, confirmedReservations.get("DO1"), airportPickup);
-
-        for (String roomID : reservationServices.keySet()) {
-            List<Service> services = reservationServices.get(roomID);
-            int totalCost = services.stream().mapToInt(Service::getCost).sum();
-            System.out.println("Reservation " + roomID + " Services: " + services + " | Total Cost: $" + totalCost);
-        }
-
-        // ------------------------------
-        // UC8: Booking History & Reporting
+        // UC8: Booking History Report
         // ------------------------------
         System.out.println("\n=== UC8: Booking History Report ===");
         for (Reservation r : bookingHistory) {
@@ -129,16 +74,25 @@ public class UseCase1HotelBookingApp {
         System.out.println("Total bookings confirmed: " + bookingHistory.size());
     }
 
-    private static void addServiceToReservation(Map<String, List<Service>> reservationServices, Reservation reservation, Service... services) {
-        if (reservation == null) return;
-        reservationServices.putIfAbsent(reservation.getRoomID(), new ArrayList<>());
-        for (Service s : services) {
-            reservationServices.get(reservation.getRoomID()).add(s);
+    // ------------------------------
+    // UC9: Validation Method
+    // ------------------------------
+    private static void validateBooking(Reservation reservation, Map<String, Integer> inventory) throws InvalidBookingException {
+        if (!inventory.containsKey(reservation.getRoomType())) {
+            throw new InvalidBookingException("Invalid room type: " + reservation.getRoomType());
+        }
+        if (inventory.get(reservation.getRoomType()) <= 0) {
+            throw new InvalidBookingException(reservation.getRoomType() + " is fully booked");
+        }
+        if (reservation.getGuestName() == null || reservation.getGuestName().isEmpty()) {
+            throw new InvalidBookingException("Guest name cannot be empty");
         }
     }
 }
 
+// ------------------------------
 // Reservation class
+// ------------------------------
 class Reservation {
     private String guestName;
     private String roomType;
@@ -160,18 +114,11 @@ class Reservation {
     }
 }
 
-// Service class for UC7
-class Service {
-    private String name;
-    private int cost;
-
-    public Service(String name, int cost) {
-        this.name = name;
-        this.cost = cost;
+// ------------------------------
+// UC9: Custom Exception
+// ------------------------------
+class InvalidBookingException extends Exception {
+    public InvalidBookingException(String message) {
+        super(message);
     }
-
-    public int getCost() { return cost; }
-
-    @Override
-    public String toString() { return name; }
 }
