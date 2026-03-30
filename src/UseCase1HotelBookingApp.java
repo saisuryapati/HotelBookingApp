@@ -16,14 +16,6 @@ public class UseCase1HotelBookingApp {
         inventory.forEach((room, count) -> System.out.println(room + " Available: " + count));
 
         // ------------------------------
-        // UC4: Read-only Room Search
-        // ------------------------------
-        System.out.println("\n=== UC4: Available Rooms ===");
-        inventory.forEach((room, count) -> {
-            if (count > 0) System.out.println(room + " Available: " + count);
-        });
-
-        // ------------------------------
         // UC5: Booking Request Queue
         // ------------------------------
         Queue<Reservation> bookingQueue = new LinkedList<>();
@@ -31,22 +23,22 @@ public class UseCase1HotelBookingApp {
         bookingQueue.add(new Reservation("Bob", "Double Room"));
         bookingQueue.add(new Reservation("Charlie", "Suite Room"));
         bookingQueue.add(new Reservation("Diana", "Single Room"));
-        bookingQueue.add(new Reservation("Eve", "InvalidRoom")); // invalid for UC9 demo
 
         // ------------------------------
-        // UC6: Reservation Confirmation & Room Allocation
+        // UC6 & UC9: Reservation Confirmation & Validation
         // ------------------------------
         HashMap<String, Set<String>> allocatedRooms = new HashMap<>();
         inventory.keySet().forEach(roomType -> allocatedRooms.put(roomType, new HashSet<>()));
 
         Map<String, Reservation> confirmedReservations = new HashMap<>();
         List<Reservation> bookingHistory = new ArrayList<>();
+        Stack<String> rollbackStack = new Stack<>();
 
-        System.out.println("\n=== UC9: Booking with Validation & Error Handling ===");
+        System.out.println("\n=== Booking with Validation ===");
         while (!bookingQueue.isEmpty()) {
             Reservation request = bookingQueue.poll();
             try {
-                validateBooking(request, inventory); // UC9 validation
+                validateBooking(request, inventory);
 
                 int available = inventory.get(request.getRoomType());
                 String roomID = request.getRoomType().substring(0, 2).toUpperCase() + (allocatedRooms.get(request.getRoomType()).size() + 1);
@@ -57,21 +49,45 @@ public class UseCase1HotelBookingApp {
                 request.setRoomID(roomID);
                 confirmedReservations.put(roomID, request);
                 bookingHistory.add(request);
+                rollbackStack.push(roomID);
 
                 System.out.println(request.getGuestName() + " booked " + request.getRoomType() + " with Room ID: " + roomID);
+
             } catch (InvalidBookingException e) {
                 System.out.println("Booking failed for " + request.getGuestName() + ": " + e.getMessage());
             }
         }
 
         // ------------------------------
-        // UC8: Booking History Report
+        // UC10: Booking Cancellation & Rollback
         // ------------------------------
-        System.out.println("\n=== UC8: Booking History Report ===");
+        System.out.println("\n=== UC10: Cancellation & Inventory Rollback ===");
+
+        // Let's cancel the last booking (LIFO)
+        if (!rollbackStack.isEmpty()) {
+            String lastRoomID = rollbackStack.pop();
+            Reservation canceled = confirmedReservations.get(lastRoomID);
+
+            if (canceled != null) {
+                String roomType = canceled.getRoomType();
+                allocatedRooms.get(roomType).remove(lastRoomID);
+                inventory.put(roomType, inventory.get(roomType) + 1);
+                bookingHistory.remove(canceled);
+                confirmedReservations.remove(lastRoomID);
+
+                System.out.println("Canceled booking: " + canceled.getGuestName() + ", Room ID: " + lastRoomID);
+            }
+        }
+
+        // Show inventory after cancellation
+        System.out.println("\nUpdated Inventory after Cancellation:");
+        inventory.forEach((room, count) -> System.out.println(room + " Available: " + count));
+
+        // Show booking history after cancellation
+        System.out.println("\nBooking History:");
         for (Reservation r : bookingHistory) {
             System.out.println("Reservation ID: " + r.getRoomID() + ", Guest: " + r.getGuestName() + ", Room Type: " + r.getRoomType());
         }
-        System.out.println("Total bookings confirmed: " + bookingHistory.size());
     }
 
     // ------------------------------
