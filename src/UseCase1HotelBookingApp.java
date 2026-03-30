@@ -1,62 +1,30 @@
-abstract class Room {
-
-    String type;
-    int beds;
-    int size;
-    double price;
-
-    Room(String type, int beds, int size, double price) {
-        this.type = type;
-        this.beds = beds;
-        this.size = size;
-        this.price = price;
-    }
-
-    void display() {
-        System.out.println("Room Type: " + type);
-        System.out.println("Beds: " + beds);
-        System.out.println("Size: " + size + " sq.ft");
-        System.out.println("Price: ₹" + price);
-    }
-}
-
-class SingleRoom extends Room {
-    SingleRoom() {
-        super("Single Room", 1, 200, 2000);
-    }
-}
-
-class DoubleRoom extends Room {
-    DoubleRoom() {
-        super("Double Room", 2, 350, 3500);
-    }
-}
-
-class SuiteRoom extends Room {
-    SuiteRoom() {
-        super("Suite Room", 3, 500, 6000);
-    }
-}
+import java.util.HashMap;
 
 public class UseCase1HotelBookingApp {
 
     public static void main(String[] args) {
 
-        Room single = new SingleRoom();
-        Room doubleRoom = new DoubleRoom();
-        Room suite = new SuiteRoom();
+        HashMap<String, Integer> inventory = new HashMap<>();
 
-        int singleAvailable = 5;
-        int doubleAvailable = 3;
-        int suiteAvailable = 2;
+        // initialize room availability
+        inventory.put("Single Room", 5);
+        inventory.put("Double Room", 3);
+        inventory.put("Suite Room", 2);
 
-        single.display();
-        System.out.println("Available: " + singleAvailable + "\n");
+        System.out.println("Room Inventory:\n");
 
-        doubleRoom.display();
-        System.out.println("Available: " + doubleAvailable + "\n");
+        // display inventory
+        for (String room : inventory.keySet()) {
+            System.out.println(room + " Available: " + inventory.get(room));
+        }
 
-        suite.display();
-        System.out.println("Available: " + suiteAvailable);
+        // update availability
+        inventory.put("Double Room", 4);
+
+        System.out.println("\nAfter Update:\n");
+
+        for (String room : inventory.keySet()) {
+            System.out.println(room + " Available: " + inventory.get(room));
+        }
     }
 }
